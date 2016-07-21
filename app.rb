@@ -32,37 +32,47 @@ module Statsd
       @config   = config
     end
 
+    def tags_from_meta(str=nil)
+      return {} unless str
+      return {} unless str.start_with?('#')
+      str[0] = ''  # Chop the '#'
+
+      str.split(',').map do |tag_key_val|
+        tag_key_val.split(':')
+      end.to_h
+    end
+
     def receive_data(msg)
       $stderr.puts msg if (@config[:debug])
 
-      bits = msg.split(':')
-      key  = bits.first.gsub(/\s+/, '_').gsub(/\//, '-').gsub(/[^a-zA-Z_\-0-9\.]/, '')
+      sample_rate = 1
 
-      bits << '1' if bits.empty?
+      key_val, kind, meta = msg.split('|')
+      key, val            = key_val.split(':')
 
-      bits.each do |b|
-        next unless b.include? '|'
+      key  = key.gsub(/\s+/, '_').gsub(/\//, '-').gsub(/[^a-zA-Z_\-0-9\.\$]/, '')
+      val  = val || 1
+      tags = tags_from_meta(meta)
 
-        sample_rate = 1
-        fields      = b.split('|')
-
-        if fields[1]
-          case fields[1].strip
-          when 'ms'
-            Appsignal.add_distribution_value(key, fields[0].to_f)
-          when 'c'
-            /^@([\d\.]+)/.match(fields[2]) {|m| sample_rate = m[1].to_f }
-            Appsignal.increment_counter(key, ((fields[0].to_f || 1) * (1/sample_rate)).to_i)
-          when 'g'
-            Appsignal.set_gauge(key, fields[0].to_f)
-          else
-            # do nothing
-            $stderr.puts "Unsupported type: #{msg}"
-          end
-        else
-          $stderr.puts "Invalid line: #{msg}"
-        end
+      tags.each do |tag, val|
+        key.gsub!("$#{tag}", val.downcase)
       end
+      puts "key: #{key}, val: #{val}, tags: #{tags.inspect}"
+
+      case kind.strip
+      when 'ms'
+        Appsignal.add_distribution_value(key, val.to_f)
+      when 'c'
+        /^@([\d\.]+)/.match(meta) {|m| sample_rate = m[1].to_f }
+        Appsignal.increment_counter(key, ((val.to_f || 1) * (1/sample_rate)).to_i)
+      when 'g'
+        Appsignal.set_gauge(key, val.to_f)
+      else
+        # do nothing
+        $stderr.puts "Unsupported type: #{msg}"
+      end
+    rescue => e
+      $stderr.puts "Invalid line: #{msg} - #{e.inspect}"
     end
 
   end
