@@ -57,7 +57,6 @@ module Statsd
       tags.each do |tag, val|
         key.gsub!("$#{tag}", val.downcase)
       end
-      puts "key: #{key}, val: #{val}, tags: #{tags.inspect}"
 
       case kind.strip
       when 'ms'
