@@ -32,16 +32,6 @@ module Statsd
       @config   = config
     end
 
-    def tags_from_meta(str=nil)
-      return {} unless str
-      return {} unless str.start_with?('#')
-      str[0] = ''  # Chop the '#'
-
-      str.split(',').map do |tag_key_val|
-        tag_key_val.split(':')
-      end.to_h
-    end
-
     def receive_data(msg)
       $stderr.puts msg if (@config[:debug])
 
@@ -52,11 +42,6 @@ module Statsd
 
       key  = key.gsub(/\s+/, '_').gsub(/\//, '-').gsub(/[^a-zA-Z_\-0-9\.\$]/, '')
       val  = val || 1
-      tags = tags_from_meta(meta)
-
-      tags.each do |tag, val|
-        key.gsub!("$#{tag}", val.downcase)
-      end
 
       case kind.strip
       when 'ms'
